@@ -1,0 +1,318 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: radial-gradient(circle at top, #11254e 0%, #080f24 100%);
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  width: 100%;
+  max-width: 480px;
+}
+
+/* Корпоративный хэдер */
+.brand-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 6px 14px;
+  border-radius: 20px;
+}
+
+.brand-dot {
+  width: 10px;
+  height: 10px;
+  background-color: #ff334b;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #ff334b;
+}
+
+.brand-name {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: #f1f5f9;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-align: center;
+  background: linear-gradient(180deg, #ffffff 0%, #94a3b8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Статус очереди и матча */
+.status-card {
+  width: 100%;
+  background: rgba(16, 28, 58, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.status-card.my-turn {
+  border-color: #22c55e;
+  background: rgba(34, 197, 94, 0.1);
+  color: #4ade80;
+  box-shadow: 0 0 15px rgba(34, 197, 94, 0.2);
+}
+
+.status-card.enemy-turn {
+  border-color: #ff334b;
+  background: rgba(255, 51, 75, 0.1);
+  color: #fca5a5;
+}
+
+/* Игровое поле с разметкой */
+.board-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 8px 10px 10px 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+
+.board-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #94a3b8;
+  letter-spacing: 0.8px;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.grid-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+.letters-row {
+  display: flex;
+  padding-left: 22px; /* смещение под номера строк */
+  margin-bottom: 4px;
+}
+
+.col-header {
+  width: 27px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  text-align: center;
+}
+
+.grid-with-numbers {
+  display: flex;
+}
+
+.numbers-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  width: 22px;
+  padding-right: 4px;
+}
+
+.row-header {
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  text-align: center;
+  height: 27px;
+  line-height: 27px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(10, 27px);
+  grid-template-rows: repeat(10, 27px);
+  gap: 2px;
+  background-color: rgba(30, 41, 59, 0.8);
+  padding: 4px;
+  border-radius: 6px;
+}
+
+/* Клетки */
+.cell {
+  width: 27px;
+  height: 27px;
+  background-color: #1e293b;
+  border-radius: 3px;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: white;
+  position: relative;
+  transition: transform 0.1s ease, background-color 0.2s;
+}
+
+.cell:hover:not(:disabled) {
+  background-color: #334155;
+  transform: scale(1.06);
+}
+
+.cell.ship {
+  background-color: #0284c7;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+}
+
+/* Анимация промаха: капля/волна */
+.cell.miss {
+  background-color: #0b1329 !important;
+  color: #64748b;
+  cursor: default;
+}
+
+.cell.miss::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background-color: #64748b;
+  border-radius: 50%;
+  animation: splash 0.25s ease-out;
+}
+
+@keyframes splash {
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1.5); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Анимация попадания: огонь и взрыв */
+.cell.hit {
+  background-color: #ef4444 !important;
+  color: white;
+  font-weight: bold;
+  cursor: default;
+  animation: explode 0.35s ease-out;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
+}
+
+@keyframes explode {
+  0% { transform: scale(0.6); background-color: #f59e0b; }
+  50% { transform: scale(1.25); background-color: #ff334b; }
+  100% { transform: scale(1); background-color: #ef4444; }
+}
+
+/* Клетки потопленного корабля */
+.cell.sunk {
+  background-color: #991b1b !important;
+  border: 1px solid #f87171;
+  animation: sunkFlash 0.5s ease-in-out;
+}
+
+@keyframes sunkFlash {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); filter: brightness(1.5); }
+}
+
+/* Ореол вокруг потопленного корабля */
+.cell.perimeter {
+  background-color: #090f20 !important;
+  cursor: default;
+}
+
+.cell.perimeter::after {
+  content: '·';
+  font-size: 14px;
+  color: #475569;
+}
+
+/* Кнопки в стиле Совкомбанка */
+.controls {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.btn {
+  background: linear-gradient(135deg, #ff334b 0%, #d80027 100%);
+  color: white;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(227, 6, 19, 0.35);
+  transition: all 0.2s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(227, 6, 19, 0.5);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: none;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.15);
+  box-shadow: none;
+}
+
+.room-bar {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+  justify-content: center;
+}
+
+.room-input {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  outline: none;
+  width: 120px;
+  text-transform: uppercase;
+}
+
+.room-input:focus {
+  border-color: #ff334b;
+}
