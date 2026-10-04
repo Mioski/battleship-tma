@@ -9,14 +9,20 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const httpServer = createServer(app);
-const io = new Server(httpServer, { cors: { origin: '*' } });
+
+const io = new Server(httpServer, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  },
+  transports: ['websocket', 'polling']
+});
 
 app.use(express.static(path.join(__dirname, '../dist')));
 app.use((req, res) => {
   res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
-// Вспомогательная функция: группирует координаты в отдельные корабли (по смежности клеток)
 function buildShipsFromCoords(coords) {
   const coordSet = new Set(coords);
   const visited = new Set();
@@ -51,7 +57,6 @@ function buildShipsFromCoords(coords) {
   return ships;
 }
 
-// Расчет клеток вокруг уничтоженного корабля
 function getSurroundingCells(shipCells) {
   const surrounding = new Set();
   const shipSet = new Set(shipCells);
@@ -77,27 +82,36 @@ function getSurroundingCells(shipCells) {
 const rooms = new Map();
 
 io.on('connection', (socket) => {
+  console.log(`[+] Игрок подключился: ${socket.id}`);
+
   socket.on('create_room', () => {
     const roomId = Math.random().toString(36).substring(2, 7).toUpperCase();
     rooms.set(roomId, {
       players: [socket.id],
-      ships: new Map(), // socketId -> array of ship objects
-      shots: new Map(), // socketId -> Set of fired coords
+      ships: new Map(),
+      shots: new Map(),
       ready: new Set(),
       currentTurn: null,
       totalHits: new Map()
     });
     socket.join(roomId);
+    console.log(`[Комната] Создана комната ${roomId} игроком ${socket.id}`);
     socket.emit('room_created', { roomId });
   });
 
   socket.on('join_room', ({ roomId }) => {
     const room = rooms.get(roomId);
-    if (!room) return socket.emit('error_msg', 'Комната не найдена');
-    if (room.players.length >= 2) return socket.emit('error_msg', 'Комната заполнена');
+    if (!room) {
+      console.log(`[Ошибка] Комната ${roomId} не найдена`);
+      return socket.emit('error_msg', 'Комната не найдена');
+    }
+    if (room.players.length >= 2) {
+      return socket.emit('error_msg', 'Комната заполнена');
+    }
 
     room.players.push(socket.id);
     socket.join(roomId);
+    console.log(`[Комната] Игрок ${socket.id} вошел в комнату ${roomId}`);
     socket.emit('room_joined', { roomId });
   });
 
@@ -110,8 +124,11 @@ io.on('connection', (socket) => {
     room.totalHits.set(socket.id, 0);
     room.ready.add(socket.id);
 
+    console.log(`[Готовность] Игрок ${socket.id} готов в комнате ${roomId} (${room.ready.size}/2)`);
+
     if (room.ready.size === 2) {
       room.currentTurn = room.players[0];
+      console.log(`[Старт] Бой в комнате ${roomId} начался! Первый ход: ${room.currentTurn}`);
       io.to(roomId).emit('battle_start', {
         currentTurn: room.currentTurn
       });
@@ -122,7 +139,6 @@ io.on('connection', (socket) => {
     const room = rooms.get(roomId);
     if (!room) return;
 
-    // 1. Строгая проверка очереди хода
     if (room.currentTurn !== socket.id) {
       return socket.emit('error_msg', 'Сейчас не ваш ход!');
     }
@@ -137,7 +153,6 @@ io.on('connection', (socket) => {
     }
     shooterShots.add(shotKey);
 
-    // 2. Проверка попадания
     let hitShip = null;
     for (const ship of opponentShips) {
       if (ship.cells.includes(shotKey)) {
@@ -153,16 +168,12 @@ io.on('connection', (socket) => {
 
     if (isHit) {
       room.totalHits.set(socket.id, room.totalHits.get(socket.id) + 1);
-      // Проверяем, потоплен ли весь корабль
       if (hitShip.hits.size === hitShip.cells.length) {
         isSunk = true;
         perimeter = getSurroundingCells(hitShip.cells);
-        // Заносим клетки периметра в сделанные выстрелы, чтобы туда нельзя было стрелять
         perimeter.forEach((pCell) => shooterShots.add(pCell));
       }
-      // При попадании ход ОСТАЕТСЯ у стрелявшего
     } else {
-      // При промахе ход ПЕРЕХОДИТ сопернику
       room.currentTurn = opponentId;
     }
 
@@ -177,14 +188,14 @@ io.on('connection', (socket) => {
       nextTurn: room.currentTurn
     });
 
-    // 3. Проверка конца игры (20 попаданий = победа)
     if (room.totalHits.get(socket.id) === 20) {
+      console.log(`[Победа] Игрок ${socket.id} победил в комнате ${roomId}!`);
       io.to(roomId).emit('game_over', { winnerId: socket.id });
     }
   });
 
   socket.on('disconnect', () => {
-    // Очистка при выходе
+    console.log(`[-] Игрок отключился: ${socket.id}`);
     for (const [roomId, room] of rooms.entries()) {
       if (room.players.includes(socket.id)) {
         io.to(roomId).emit('error_msg', 'Соперник отключился от игры');
@@ -195,6 +206,6 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3001;
-httpServer.listen(PORT, '0.0.0.0', () => {
-  console.log(`Сервер запущен на порту ${PORT}!`);
+httpServer.listen(PORT, () => {
+  console.log(`Сервер запущен и слушает порт ${PORT}`);
 });

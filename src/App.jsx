@@ -2,20 +2,26 @@ import { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import './App.css';
 
-const socket = io();
+// Автоматическое подключение к текущему хосту (Railway) с поддержкой всех транспортов
+const socket = io({
+  transports: ['websocket', 'polling'],
+  reconnectionAttempts: 5,
+  timeout: 10000
+});
+
 const tg = window.Telegram?.WebApp;
 
-// 10 букв по стандарту правил РФ (без Ё)
 const COL_LETTERS = ['А', 'Б', 'В', 'Г', 'Д', 'Е', 'Ж', 'З', 'И', 'К'];
 const ROW_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const FLEET_CONFIG = [4, 3, 3, 2, 2, 2, 1, 1, 1, 1];
 
 export default function App() {
+  const [isConnected, setIsConnected] = useState(socket.connected);
   const [roomId, setRoomId] = useState('');
   const [inputRoomId, setInputRoomId] = useState('');
   const [gamePhase, setGamePhase] = useState('lobby'); // lobby | placement | battle | gameover
   const [myShips, setMyShips] = useState(new Set());
-  const [myShots, setMyShots] = useState({}); // "x,y" => 'hit' | 'miss' | 'sunk' | 'perimeter'
+  const [myShots, setMyShots] = useState({});
   const [enemyShots, setEnemyShots] = useState({});
   const [isMyTurn, setIsMyTurn] = useState(false);
   const [statusText, setStatusText] = useState('Создайте бой или подключитесь по коду');
@@ -24,6 +30,23 @@ export default function App() {
     tg?.ready();
     tg?.expand();
 
+    // Отслеживание статуса соединения
+    socket.on('connect', () => {
+      console.log('Подключено к серверу, socket ID:', socket.id);
+      setIsConnected(true);
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Связь с сервером потеряна');
+      setIsConnected(false);
+    });
+
+    socket.on('connect_error', (err) => {
+      console.error('Ошибка подключения:', err.message);
+      setIsConnected(false);
+    });
+
+    // Обработка инвайта из Telegram startapp
     const inviteCode = tg?.initDataUnsafe?.start_param;
     if (inviteCode) {
       socket.emit('join_room', { roomId: inviteCode.toUpperCase() });
@@ -33,12 +56,14 @@ export default function App() {
       setRoomId(roomId);
       setGamePhase('placement');
       setStatusText(`Комната: ${roomId}. Сформируйте эскадру`);
+      tg?.HapticFeedback?.notificationOccurred('success');
     });
 
     socket.on('room_joined', ({ roomId }) => {
       setRoomId(roomId);
       setGamePhase('placement');
       setStatusText(`Вы вошли в ${roomId}. Расставьте флот`);
+      tg?.HapticFeedback?.notificationOccurred('success');
     });
 
     socket.on('battle_start', ({ currentTurn }) => {
@@ -46,7 +71,6 @@ export default function App() {
       const turn = socket.id === currentTurn;
       setIsMyTurn(turn);
       setStatusText(turn ? 'Бой начался! Ваш выстрел 🎯' : 'Бой начался! Ожидаем ход соперника ⏳');
-      // Тактильный отклик в Telegram
       tg?.HapticFeedback?.notificationOccurred('success');
     });
 
@@ -78,7 +102,6 @@ export default function App() {
           tg?.HapticFeedback?.impactOccurred('light');
         }
       } else {
-        // Мы были целью
         setEnemyShots((prev) => {
           const updated = { ...prev, [`${x},${y}`]: result };
           if (isSunk) {
@@ -117,7 +140,24 @@ export default function App() {
     return () => socket.off();
   }, []);
 
-  // Генератор расстановки флота
+  const handleCreateRoom = () => {
+    if (!socket.connected) {
+      alert('Нет связи с сервером! Подождите пару секунд или обновите страницу.');
+      return;
+    }
+    socket.emit('create_room');
+  };
+
+  const handleJoinRoom = () => {
+    if (!socket.connected) {
+      alert('Нет связи с сервером!');
+      return;
+    }
+    if (inputRoomId.trim()) {
+      socket.emit('join_room', { roomId: inputRoomId.trim().toUpperCase() });
+    }
+  };
+
   const generateRandomFleet = () => {
     const occupied = new Set();
     const isFree = (x, y) => {
@@ -175,7 +215,6 @@ export default function App() {
     }
   };
 
-  // Отрисовка игрового поля с буквенной и цифровой шкалой
   const renderBoard = (title, isEnemy) => (
     <div className="board-container">
       <span className="board-label">{title}</span>
@@ -234,6 +273,11 @@ export default function App() {
         <span className="brand-name">СОВКОМБАНК ИТ</span>
       </div>
 
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: isConnected ? '#4ade80' : '#f87171' }}>
+        <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isConnected ? '#4ade80' : '#f87171' }}></span>
+        <span>{isConnected ? 'Сервер онлайн' : 'Подключение к серверу...'}</span>
+      </div>
+
       <h1 className="title">Морской бой</h1>
 
       <div className={`status-card ${gamePhase === 'battle' ? (isMyTurn ? 'my-turn' : 'enemy-turn') : ''}`}>
@@ -242,7 +286,7 @@ export default function App() {
 
       {gamePhase === 'lobby' && (
         <div className="controls">
-          <button className="btn" onClick={() => socket.emit('create_room')}>
+          <button className="btn" onClick={handleCreateRoom}>
             Создать сражение ⚔️
           </button>
           <div className="room-bar">
@@ -252,10 +296,7 @@ export default function App() {
               value={inputRoomId}
               onChange={(e) => setInputRoomId(e.target.value)}
             />
-            <button
-              className="btn btn-secondary"
-              onClick={() => inputRoomId.trim() && socket.emit('join_room', { roomId: inputRoomId.trim().toUpperCase() })}
-            >
+            <button className="btn btn-secondary" onClick={handleJoinRoom}>
               Войти
             </button>
           </div>
